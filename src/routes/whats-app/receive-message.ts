@@ -3,8 +3,10 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { WebhookParserService } from './parsers/webhook-parser'
 import { savePayloadToJson } from '@/utils/save-payload-to-json'
 import { MessageType, MessagingService } from '@/services/messaging-service'
+import { MessageProcessingService } from '@/services/message-processing-service'
 
 type Resources = {
+	messageProcessingService: MessageProcessingService
 	messagingService: MessagingService
 }
 
@@ -29,6 +31,8 @@ export async function receiveMessage(
 			switch (parseResult.type) {
 				case 'success': {
 					const event = parseResult.event
+
+					await resources.messageProcessingService.processMessage(event)
 
 					req.log.info(
 						{

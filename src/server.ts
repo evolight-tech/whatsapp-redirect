@@ -7,15 +7,21 @@ import {
 	MessagingService,
 	WhatsAppMessagingService,
 } from './services/messaging-service'
+import { MessageProcessingService } from './services/message-processing-service'
 
 app.get('/health', async () => ({ status: 'ok' }))
 
 let messagingService: MessagingService
+let messageProcessingService: MessageProcessingService
 
 async function bootstrap() {
 	try {
 		console.log('Server bootstrapping...')
 		messagingService = new WhatsAppMessagingService({ logger: app.log })
+		messageProcessingService = new MessageProcessingService({
+			logger: app.log,
+			messagingService,
+		})
 	} catch (error) {
 		app.log.error({ err: error }, 'Failed to initialize dependencies')
 		process.exit(1)
@@ -32,6 +38,7 @@ async function bootstrap() {
 
 	await app.register(whatsAppRouter, {
 		messagingService,
+		messageProcessingService,
 	})
 
 	const config: FastifyListenOptions = {
