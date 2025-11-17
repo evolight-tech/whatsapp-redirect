@@ -57,6 +57,14 @@ async function bootstrap() {
 		const address = await app.listen({ ...config })
 		console.log('Server started successfully!')
 		console.log('Address:', address)
+
+		const NOT_SENSITIVE_ENV_VARS = {
+			NODE_ENV: env.NODE_ENV,
+			PORT: env.PORT,
+		}
+
+		console.log('Not sensitive env vars:')
+		console.log(NOT_SENSITIVE_ENV_VARS)
 	} catch (error) {
 		console.error('ERROR in listen:', error)
 		app.log.error(error)
