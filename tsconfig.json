@@ -19,6 +19,6 @@
 
     }
   },
-  "include": ["src/**/*", "seed.ts", "clear-database.ts", "reset-database.ts"],
+  "include": ["src/**/*", "test.ts"],
   "exclude": ["node_modules"]
 }
