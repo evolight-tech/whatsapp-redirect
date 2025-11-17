@@ -13,6 +13,7 @@ import type {
 	OutboundDocumentMessage,
 } from '@/domain/whatsapp/outbound-message-types'
 import { env } from '@/config/env'
+import { FastifyBaseLogger } from 'fastify'
 
 /**
  * Payload da WhatsApp Cloud API
@@ -55,14 +56,19 @@ export class WhatsAppMessagingService implements MessagingService {
 	private readonly apiUrl: string
 	private readonly accessToken: string
 	private readonly phoneNumberId: string
+	private readonly logger: FastifyBaseLogger
 
-	constructor() {
+	constructor(opts: { logger: FastifyBaseLogger }) {
 		this.phoneNumberId = env.PHONE_NUMBER_ID
 		this.accessToken = env.WPP_TOKEN
 		this.apiUrl = `https://graph.facebook.com/v21.0/${this.phoneNumberId}/messages`
+		this.logger = opts.logger.child({
+			service: 'WhatsAppMessagingService',
+		})
 	}
 
 	async send(message: OutboundMessage): Promise<SendMessageResult> {
+		const log = this.logger.child({ to: message.to.phone, type: message.type })
 		try {
 			const payload = this.buildPayload(message)
 
@@ -77,7 +83,9 @@ export class WhatsAppMessagingService implements MessagingService {
 
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => ({}))
+				log.error({ errorData, status: response.status }, 'WhatsApp API error')
 				throw new Error(
+					// Manter o throw para a lógica de retorno de erro
 					`WhatsApp API error: ${response.status} - ${JSON.stringify(errorData)}`
 				)
 			}
@@ -85,13 +93,14 @@ export class WhatsAppMessagingService implements MessagingService {
 			const data: any = await response.json()
 			const messageId = data.messages?.[0]?.id
 
+			log.info({ messageId }, 'Message sent successfully')
 			return {
 				success: true,
 				messageId,
 				timestamp: new Date(),
 			}
 		} catch (error) {
-			console.error('[WhatsAppMessagingService] Send failed:', error)
+			log.error({ err: error }, 'Send failed')
 
 			return {
 				success: false,

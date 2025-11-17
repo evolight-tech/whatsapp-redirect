@@ -15,7 +15,7 @@ let messagingService: MessagingService
 async function bootstrap() {
 	try {
 		console.log('Server bootstrapping...')
-		messagingService = new WhatsAppMessagingService()
+		messagingService = new WhatsAppMessagingService({ logger: app.log })
 	} catch (error) {
 		app.log.error({ err: error }, 'Failed to initialize dependencies')
 		process.exit(1)
@@ -43,10 +43,15 @@ async function bootstrap() {
 	}
 
 	try {
+		console.log(
+			'Server will use the following config (besides inner defaults):\n',
+			config
+		)
 		const address = await app.listen({ ...config })
-		console.log('Server started')
-		console.log(address)
+		console.log('Server started successfully!')
+		console.log('Address:', address)
 	} catch (error) {
+		console.error('ERROR in listen:', error)
 		app.log.error(error)
 		process.exit(1)
 	}
