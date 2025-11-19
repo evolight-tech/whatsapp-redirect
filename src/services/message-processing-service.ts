@@ -78,7 +78,10 @@ export class MessageProcessingService {
 			})
 		)
 
-		historyMessage += messagePartByClient.join('\n\n\n\n')
+		historyMessage +=
+			messagePartByClient.length > 0
+				? messagePartByClient.join('\n\n\n\n')
+				: 'Nenhuma mensagem recebida ainda.'
 
 		await this.dependencies.messagingService.send({
 			type: MessageType.TEXT,
