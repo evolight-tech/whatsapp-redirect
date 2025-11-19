@@ -8,8 +8,12 @@ import {
 	WhatsAppMessagingService,
 } from './services/messaging-service'
 import { MessageProcessingService } from './services/message-processing-service'
+import { ClientService } from './services/client-service'
+import { MessageService } from './services/message-service'
+import { ManagerService } from './services/manager-service'
 
 app.get('/health', async () => ({ status: 'ok' }))
+app.get('/healthy', async () => ({ message: 'yes' }))
 
 let messagingService: MessagingService
 let messageProcessingService: MessageProcessingService
@@ -18,9 +22,17 @@ async function bootstrap() {
 	try {
 		console.log('Server bootstrapping...')
 		messagingService = new WhatsAppMessagingService({ logger: app.log })
+
+		const clientService = new ClientService()
+		const messageService = new MessageService()
+		const managerService = new ManagerService()
+
 		messageProcessingService = new MessageProcessingService({
 			logger: app.log,
 			messagingService,
+			clientService,
+			messageService,
+			managerService,
 		})
 	} catch (error) {
 		app.log.error({ err: error }, 'Failed to initialize dependencies')

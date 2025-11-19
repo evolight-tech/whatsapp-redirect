@@ -1,39 +1,30 @@
 import { FastifyBaseLogger } from 'fastify'
-import { Dayjs, dayjs } from '@/config/date-and-time'
-import { env } from '@/config/env'
-import { managersPhone } from '@/constants'
+import { dayjs } from '@/config/date-and-time'
 import { MessageReceivedEvent } from '@/events/message-received-event'
 import { MessageType, MessagingService } from './messaging-service'
+import { ClientService } from './client-service'
+import { MessageService } from './message-service'
+import { ManagerService } from './manager-service'
 
 type Dependencies = {
 	logger: FastifyBaseLogger
 	messagingService: MessagingService
-}
-
-type MessageRegistry = { text: string; sentAt: Dayjs }
-
-type ClientRegistry = {
-	name: string
-	phone: string
-	messages: MessageRegistry[]
+	clientService: ClientService
+	messageService: MessageService
+	managerService: ManagerService
 }
 
 export class MessageProcessingService {
-	private static readonly MAX_CLIENTS = 1000
-	private static readonly MAX_MESSAGES_PER_CLIENT = 100
-
-	private clientHistory: ClientRegistry[] = []
-
 	constructor(private dependencies: Dependencies) {}
 
 	async processMessage(event: MessageReceivedEvent) {
-		const managersPhones = Object.entries(managersPhone)
-		const selectedManager = managersPhones.find(
-			([_, phone]) => phone === event.senderPhone
+		const managers = await this.dependencies.managerService.getAllManagers()
+		const isManager = managers.some(
+			manager => manager.phone === event.senderPhone
 		)
 
-		if (selectedManager) {
-			await this.sendHistory(selectedManager[1])
+		if (isManager) {
+			await this.sendHistory(event.senderPhone)
 		} else {
 			await this.reportToManager(event)
 		}
@@ -46,74 +37,48 @@ export class MessageProcessingService {
 			to: { phone: event.senderPhone },
 		})
 
+		const managers = await this.dependencies.managerService.getAllManagers()
+
 		await Promise.allSettled(
-			Object.entries(managersPhone).map(async ([_, phone]) => {
+			managers.map(async manager => {
 				return this.dependencies.messagingService.send({
 					type: MessageType.TEXT,
 					text: `*${event.senderName ?? 'Pessoa sem nome registrado'}* - ${event.senderPhone}\n*Enviou:*\n${event.text}`,
-					to: { phone },
+					to: { phone: manager.phone },
 				})
 			})
 		)
 
-		const messageRegistry: MessageRegistry = {
-			text: event.text,
-			sentAt: dayjs.utc(),
-		}
-
-		const existingClient = this.clientHistory.find(
-			client => client.phone === event.senderPhone
+		const client = await this.dependencies.clientService.getOrCreateClient(
+			event.senderName ?? 'Cliente sem nome',
+			event.senderPhone
 		)
 
-		if (existingClient) {
-			existingClient.name = event.senderName ?? existingClient.name
-			this.addMessageToClient(existingClient, messageRegistry)
-		} else {
-			const newClient: ClientRegistry = {
-				name: event.senderName ?? 'Cliente sem nome',
-				phone: event.senderPhone,
-				messages: [messageRegistry],
-			}
-			this.addClientToHistory(newClient)
-		}
-	}
-
-	private addMessageToClient(
-		client: ClientRegistry,
-		message: MessageRegistry
-	): void {
-		client.messages.unshift(message)
-
-		if (
-			client.messages.length > MessageProcessingService.MAX_MESSAGES_PER_CLIENT
-		) {
-			client.messages.pop()
-		}
-	}
-
-	private addClientToHistory(client: ClientRegistry): void {
-		this.clientHistory.unshift(client)
-
-		if (this.clientHistory.length > MessageProcessingService.MAX_CLIENTS) {
-			this.clientHistory.pop()
-		}
+		await this.dependencies.messageService.createClientMessage(
+			client.id,
+			event.text
+		)
 	}
 
 	private async sendHistory(managerPhone: string) {
 		let historyMessage = '*Histórico de mensagens recebidas:*\n\n'
-		const messagePartByClient = this.clientHistory
-			.map(
-				client =>
-					`*${client.name}* - ${client.phone}\n${client.messages
-						.map(
-							message =>
-								`*${dayjs(message.sentAt).format('DD/MM/YYYY HH:mm')}*\n${message.text}`
-						)
-						.join('\n\n')}`
-			)
-			.join('\n\n\n\n')
 
-		historyMessage += messagePartByClient
+		const clients = await this.dependencies.clientService.getAllClients()
+
+		const messagePartByClient = await Promise.all(
+			clients.map(async client => {
+				const messages =
+					await this.dependencies.messageService.getClientMessages(client.id)
+				return `*${client.name}* - ${client.phone}\n${messages
+					.map(
+						msg =>
+							`*${dayjs(msg.createdAt).format('DD/MM/YYYY HH:mm')}*\n${msg.text}`
+					)
+					.join('\n\n')}`
+			})
+		)
+
+		historyMessage += messagePartByClient.join('\n\n\n\n')
 
 		await this.dependencies.messagingService.send({
 			type: MessageType.TEXT,
