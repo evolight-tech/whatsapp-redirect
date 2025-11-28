@@ -4,6 +4,7 @@ import { database } from '@/lib/drizzle'
 const defaultManagers = [
 	{ name: 'Paula', phone: '556283132731' },
 	{ name: 'Caio', phone: '556292476996' },
+	{ name: 'Weldner', phone: '556284093956' },
 ]
 
 async function run() {
