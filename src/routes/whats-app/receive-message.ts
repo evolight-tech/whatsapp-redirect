@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
-import { WebhookParserService } from './parsers/webhook-parser'
-import { savePayloadToJson } from '@/utils/save-payload-to-json'
-import { MessageType, MessagingService } from '@/services/messaging-service'
+import { env } from '@/config/env'
 import { MessageProcessingService } from '@/services/message-processing-service'
+import { MessageType, MessagingService } from '@/services/messaging-service'
+import { savePayloadToJson } from '@/utils/save-payload-to-json'
+import { WebhookParserService } from './parsers/webhook-parser'
 
 type Resources = {
 	messageProcessingService: MessageProcessingService
@@ -25,6 +26,59 @@ export async function receiveMessage(
 		handler: async (req, reply) => {
 			// Save the raw webhook payload
 			await savePayloadToJson(req.body)
+
+			// Forwarding logic
+			try {
+				const entry0 = (req.body as any)?.entry?.[0]
+				const change0 = entry0?.changes?.[0]
+				const msg = change0?.value?.messages?.[0]
+				const rawFrom = String(msg?.from ?? '')
+
+				if (rawFrom) {
+					const { LOCAL_FORWARD_URL, FORWARD_SECRET, TEST_NUMBERS } = env
+					const testNumbers = TEST_NUMBERS.split(';')
+						.map(s => s.trim())
+						.filter(Boolean)
+
+					const fwdHeader = req.headers['x-wpp-forwarded']
+					const isAlreadyForwarded =
+						typeof fwdHeader === 'string' && fwdHeader === FORWARD_SECRET
+					const hasTarget = !!LOCAL_FORWARD_URL && !!FORWARD_SECRET
+
+					if (
+						hasTarget &&
+						testNumbers.includes(rawFrom) &&
+						!isAlreadyForwarded
+					) {
+						const res = await fetch(`${LOCAL_FORWARD_URL}/`, {
+							method: 'POST',
+							headers: {
+								'content-type': 'application/json',
+								'x-wpp-forwarded': String(FORWARD_SECRET),
+							},
+							body: JSON.stringify(req.body),
+						})
+
+						if (res.ok) {
+							req.log.info(
+								{ forwardedTo: LOCAL_FORWARD_URL },
+								'Message forwarded successfully'
+							)
+							return reply.status(200).send({ status: 'ok', forwarded: true })
+						} else {
+							req.log.warn(
+								{ status: res.status },
+								'Forwarding failed, falling back to local processing'
+							)
+						}
+					}
+				}
+			} catch (err) {
+				req.log.error(
+					{ err },
+					'Error during message forwarding, falling back to local processing'
+				)
+			}
 
 			const parseResult = webhookParser.parse(req.body)
 

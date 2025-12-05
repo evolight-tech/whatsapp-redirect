@@ -37,6 +37,10 @@ export const envSchema = z.object({
 	OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().optional(),
 	OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
 	OTEL_RESOURCE_ATTRIBUTES: z.string().optional(),
+	// Forwarding configuration
+	LOCAL_FORWARD_URL: z.string().optional(),
+	FORWARD_SECRET: z.string().optional(),
+	TEST_NUMBERS: z.string().default(''),
 })
 
 const env = envSchema.parse(process.env)
